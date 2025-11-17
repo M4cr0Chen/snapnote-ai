@@ -7,8 +7,70 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 SnapNote is an AI-powered note processing platform that converts classroom photos (handwritten notes, blackboard writings, or PPT screenshots) into formatted Markdown notes. The system uses Google Cloud Vision for OCR and Anthropic's Claude for intelligent note formatting.
 
 **Architecture**: Full-stack application with separate frontend and backend
-- **Frontend**: Next.js 16 (React 19) with Tailwind CSS 4
-- **Backend**: FastAPI (Python) with Google Cloud Vision and Anthropic Claude APIs
+- **Frontend**: Next.js 16 (React 19) with Tailwind CSS 4, TypeScript, Zustand, Auth0
+- **Backend**: FastAPI (Python) with PostgreSQL, Auth0, Google Cloud Vision, and Anthropic Claude APIs
+
+## Design Documents
+
+**Important**: Before implementing new features, review these design documents:
+
+### Frontend Design
+
+- **`frontend/docs/DESIGN_DOC_DASHBOARD.md`**: Comprehensive design specification for the dashboard UI with course-based organization. Includes:
+  - Course-based information architecture (Dashboard → Courses → Documents)
+  - Multi-page dashboard with sidebar navigation
+  - Course grid view and document list view
+  - User authentication and profiles
+  - Complete component breakdown and data models
+  - API endpoints specification
+  - 7-phase implementation timeline
+
+- **`frontend/docs/COMPONENT_SPECS.md`**: Detailed component specifications with HTML structure, TypeScript interfaces, styling guidelines, and interaction patterns. Includes CourseGrid, CourseCard, CreateCourseModal, DocumentList, and all UI components.
+
+- **`frontend/docs/MOCKUPS.md`**: Visual ASCII wireframes showing desktop/mobile layouts, component states, empty states, loading states, and color palette.
+
+### Backend Design
+
+- **`backend/docs/DESIGN_DOC_DATA_PERSISTENCE.md`**: Complete PostgreSQL database design and implementation plan. Includes:
+  - Entity relationship diagram (Users → Courses → Documents)
+  - Complete database schema with indexes and constraints
+  - SQLAlchemy models and relationships
+  - Authentication with Auth0 JWT validation
+  - API endpoint implementations
+  - Database migrations with Alembic
+  - Backup, security, and performance optimization strategies
+
+## Technology Stack
+
+### Frontend
+- **Framework**: Next.js 16 (App Router)
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS 4
+- **State Management**: Zustand ✓
+- **Authentication**: Auth0 ✓
+- **Data Fetching**: React Query (recommended)
+- **Icons**: Lucide React
+
+### Backend
+- **Framework**: FastAPI
+- **Database**: PostgreSQL 14+
+- **ORM**: SQLAlchemy
+- **Migrations**: Alembic
+- **Authentication**: Auth0 JWT Validation ✓
+- **OCR**: Google Cloud Vision
+- **LLM**: Anthropic Claude
+
+### Key Dependencies
+
+**Frontend:**
+```bash
+npm install zustand @auth0/auth0-react @tanstack/react-query
+```
+
+**Backend:**
+```bash
+pip install fastapi sqlalchemy alembic psycopg2-binary python-jose[cryptography] requests
+```
 
 ## Development Commands
 
@@ -29,6 +91,9 @@ pip install -r requirements.txt
 # Create .env file with:
 # GOOGLE_APPLICATION_CREDENTIALS=credentials/your-key.json
 # ANTHROPIC_API_KEY=your-key-here
+# AUTH0_DOMAIN=your-domain.auth0.com
+# AUTH0_AUDIENCE=your-api-audience
+# DATABASE_URL=postgresql://user:password@localhost:5432/snapnote
 
 # Run development server
 python main.py
@@ -48,9 +113,12 @@ cd frontend
 # Install dependencies
 npm install
 
-# Configure environment (optional)
+# Configure environment
 # Create .env.local with:
 # NEXT_PUBLIC_API_URL=http://localhost:8000
+# NEXT_PUBLIC_AUTH0_DOMAIN=your-domain.auth0.com
+# NEXT_PUBLIC_AUTH0_CLIENT_ID=your-client-id
+# NEXT_PUBLIC_AUTH0_AUDIENCE=your-api-audience
 
 # Run development server
 npm run dev
