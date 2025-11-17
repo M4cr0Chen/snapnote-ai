@@ -1,6 +1,7 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Form
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
+from contextlib import asynccontextmanager
 import aiofiles
 import os
 import time
@@ -8,30 +9,51 @@ import logging
 from pathlib import Path
 
 from config import settings
-from models.schemas import (
-    HealthResponse, 
-    UploadResponse, 
-    ProcessNoteResponse,
-    ProcessNoteRequest
+from database import get_db
+from models import User, Course, Document
+from schemas import (
+    HealthResponse,
+    UploadResponse,
+    ProcessNoteResponse
 )
 from services.ocr_service import ocr_service
 from services.llm_service import llm_service
+from services.auth_service import get_current_user
+from routes import user_router, courses_router, documents_router
 
-# 配置日志
+# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# 创建 FastAPI 应用
+
+# Lifespan event handler
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Handle application startup and shutdown"""
+    # Startup
+    logger.info("Starting up application...")
+    # Ensure upload directory exists
+    Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
+    logger.info("Database ready")
+
+    yield
+
+    # Shutdown
+    logger.info("Shutting down application...")
+
+
+# Create FastAPI app
 app = FastAPI(
-    title="AI Note Processing API",
-    description="智能课堂笔记整理平台 API",
-    version="0.1.0"
+    title="SnapNote AI API",
+    description="AI-powered note processing platform",
+    version="1.0.0",
+    lifespan=lifespan
 )
 
-# 配置 CORS
+# Configure CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
@@ -40,8 +62,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 确保上传目录存在
-Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
+# Include routers
+app.include_router(user_router)
+app.include_router(courses_router)
+app.include_router(documents_router)
 
 @app.get("/", response_model=HealthResponse)
 async def root():
@@ -148,59 +172,132 @@ async def ocr_image(file: UploadFile = File(...)):
 @app.post("/process-note", response_model=ProcessNoteResponse)
 async def process_note(
     file: UploadFile = File(...),
-    additional_context: str = Form(None)
+    additional_context: str = Form(None),
+    course_id: str = Form(None),
+    title: str = Form(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     """
-    完整的笔记处理流程：上传 -> OCR -> LLM 整理
-    
+    Complete note processing pipeline: Upload -> OCR -> LLM formatting -> Save to database
+
+    Requires authentication. Documents are automatically saved to the specified course.
+
     Args:
-        file: 上传的图片文件
-        additional_context: 额外的上下文信息（可选）
-    
+        file: Image file to process
+        additional_context: Additional context for LLM (optional)
+        course_id: Course ID to save the document to
+        title: Document title (optional, generated from content if not provided)
+        current_user: Current authenticated user (injected)
+        db: Database session (injected)
+
     Returns:
-        ProcessNoteResponse: 处理结果
+        ProcessNoteResponse: Processing result with document ID
     """
     start_time = time.time()
-    
+    saved_file_path = None
+
     try:
-        logger.info(f"开始处理笔记: {file.filename}")
-        
-        # 1. 读取文件
+        logger.info(f"Processing note for user {current_user.email}: {file.filename}")
+
+        # Verify course exists and belongs to user
+        if not course_id:
+            raise HTTPException(status_code=400, detail="course_id is required")
+
+        course = db.query(Course).filter(
+            Course.id == course_id,
+            Course.user_id == current_user.id
+        ).first()
+
+        if not course:
+            raise HTTPException(status_code=404, detail="Course not found")
+
+        # 1. Read file
         contents = await file.read()
-        
-        # 2. OCR 识别
-        logger.info("步骤 1/2: OCR 识别中...")
+
+        # Save uploaded file
+        timestamp = int(time.time() * 1000)
+        filename = f"{timestamp}_{file.filename}"
+        saved_file_path = os.path.join(settings.upload_dir, filename)
+
+        async with aiofiles.open(saved_file_path, 'wb') as f:
+            await f.write(contents)
+
+        # 2. OCR recognition
+        logger.info("Step 1/2: OCR processing...")
         ocr_text, confidence = ocr_service.extract_text(contents)
-        
+
         if not ocr_text or len(ocr_text.strip()) < 10:
-            raise Exception("OCR 识别失败或文本内容过少")
-        
-        logger.info(f"OCR 完成，识别到 {len(ocr_text)} 个字符，置信度: {confidence:.2f}")
-        
-        # 3. LLM 整理
-        logger.info("步骤 2/2: LLM 整理中...")
+            raise Exception("OCR failed or text content too short")
+
+        logger.info(f"OCR completed, extracted {len(ocr_text)} characters, confidence: {confidence:.2f}")
+
+        # 3. LLM formatting
+        logger.info("Step 2/2: LLM formatting...")
         formatted_note = llm_service.format_note(ocr_text, additional_context)
-        
+
+        # 4. Save to database
+        # Generate title from formatted note if not provided
+        if not title:
+            # Extract first line or first 50 characters as title
+            lines = formatted_note.split('\n')
+            title = lines[0].strip('#').strip()[:100] if lines else "Untitled Note"
+
+        # Create excerpt from formatted note
+        excerpt = formatted_note[:200]
+
+        # Create document
+        document = Document(
+            course_id=course_id,
+            user_id=current_user.id,
+            title=title,
+            original_text=ocr_text,
+            formatted_note=formatted_note,
+            excerpt=excerpt,
+            image_path=saved_file_path,
+            processing_time=time.time() - start_time,
+            doc_metadata={
+                "ocr_confidence": confidence,
+                "file_name": file.filename,
+                "context": additional_context
+            }
+        )
+
+        db.add(document)
+        db.commit()
+        db.refresh(document)
+
         processing_time = time.time() - start_time
-        logger.info(f"处理完成，耗时 {processing_time:.2f} 秒")
-        
+        logger.info(f"Processing completed in {processing_time:.2f}s, document saved: {document.id}")
+
         return ProcessNoteResponse(
             success=True,
             original_text=ocr_text,
             formatted_note=formatted_note,
             processing_time=processing_time,
+            document_id=str(document.id),
             error=None
         )
-        
+
+    except HTTPException:
+        # Clean up file if it was saved
+        if saved_file_path and os.path.exists(saved_file_path):
+            os.remove(saved_file_path)
+        raise
     except Exception as e:
+        # Clean up file if it was saved
+        if saved_file_path and os.path.exists(saved_file_path):
+            os.remove(saved_file_path)
+
         processing_time = time.time() - start_time
-        logger.error(f"处理失败: {str(e)}")
-        
+        logger.error(f"Processing failed: {str(e)}")
+
         return ProcessNoteResponse(
             success=False,
             original_text="",
             formatted_note="",
             processing_time=processing_time,
+            document_id=None,
             error=str(e)
         )
 

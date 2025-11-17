@@ -4,47 +4,64 @@ from pydantic_settings import BaseSettings
 from pathlib import Path
 
 class Settings(BaseSettings):
-    """应用配置"""
-    
-    # API 配置
-    app_name: str = "AI Note Processing API"
+    """Application configuration"""
+
+    # API configuration
+    app_name: str = "SnapNote AI API"
     debug: bool = True
-    
-    # CORS 配置
+
+    # CORS configuration
     allowed_origins: List[str] = [
         "http://localhost:3000",
         "http://localhost:5173",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:5173"
     ]
-    
-    # 文件上传配置
+
+    # Database configuration
+    database_url: str = os.getenv(
+        "DATABASE_URL",
+        "postgresql://snapnote:password@localhost:5432/snapnote"
+    )
+
+    # Connection pool settings
+    db_pool_size: int = 5
+    db_max_overflow: int = 10
+    db_pool_timeout: int = 30
+    db_pool_recycle: int = 3600
+
+    # Auth0 configuration
+    auth0_domain: str = os.getenv("AUTH0_DOMAIN", "")
+    auth0_audience: str = os.getenv("AUTH0_AUDIENCE", "")
+    auth0_algorithms: List[str] = ["RS256"]  # Auth0 uses RS256
+
+    # File upload configuration
     upload_dir: str = "uploads"
     max_file_size: int = 10 * 1024 * 1024  # 10MB
-    
-    # Google Cloud Vision API 配置
+
+    # Google Cloud Vision API configuration
     google_application_credentials: str = os.getenv(
-        "GOOGLE_APPLICATION_CREDENTIALS", 
+        "GOOGLE_APPLICATION_CREDENTIALS",
         ""
     )
-    
-    # Anthropic API 配置
+
+    # Anthropic API configuration
     anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "")
-    
+
     class Config:
         env_file = ".env"
         case_sensitive = False
 
-# 创建全局配置实例
+# Create global settings instance
 settings = Settings()
 
-# 设置 Google Cloud 凭证环境变量
+# Set Google Cloud credentials environment variable
 if settings.google_application_credentials:
-    # 如果是相对路径，转换为绝对路径
+    # Convert relative path to absolute path
     credentials_path = Path(settings.google_application_credentials)
     if not credentials_path.is_absolute():
-        # 相对于 backend 目录
+        # Relative to backend directory
         credentials_path = Path(__file__).parent / credentials_path
-    
-    # 设置环境变量
+
+    # Set environment variable
     os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(credentials_path.absolute())
