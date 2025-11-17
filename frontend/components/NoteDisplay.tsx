@@ -6,7 +6,17 @@ import remarkGfm from 'remark-gfm';
 import { FileText, Copy, Check, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-export default function NoteDisplay({ originalText, formattedNote, processingTime }) {
+interface NoteDisplayProps {
+  originalText: string;
+  formattedNote: string;
+  processingTime?: number;
+}
+
+export default function NoteDisplay({
+  originalText,
+  formattedNote,
+  processingTime
+}: NoteDisplayProps) {
   const [copied, setCopied] = useState(false);
   const [showOriginal, setShowOriginal] = useState(false);
 
@@ -36,7 +46,7 @@ export default function NoteDisplay({ originalText, formattedNote, processingTim
 
   return (
     <div className="space-y-4">
-      {/* 头部操作栏 */}
+      {/* Header toolbar */}
       <div className="flex items-center justify-between bg-gray-50 p-4 rounded-lg">
         <div className="flex items-center space-x-2">
           <FileText className="w-5 h-5 text-blue-600" />
@@ -47,7 +57,7 @@ export default function NoteDisplay({ originalText, formattedNote, processingTim
             </span>
           )}
         </div>
-        
+
         <div className="flex space-x-2">
           <button
             onClick={() => setShowOriginal(!showOriginal)}
@@ -55,7 +65,7 @@ export default function NoteDisplay({ originalText, formattedNote, processingTim
           >
             {showOriginal ? '隐藏原文' : '查看原文'}
           </button>
-          
+
           <button
             onClick={copyToClipboard}
             className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors flex items-center space-x-1"
@@ -72,7 +82,7 @@ export default function NoteDisplay({ originalText, formattedNote, processingTim
               </>
             )}
           </button>
-          
+
           <button
             onClick={downloadMarkdown}
             className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center space-x-1"
@@ -83,7 +93,7 @@ export default function NoteDisplay({ originalText, formattedNote, processingTim
         </div>
       </div>
 
-      {/* 原始文本 (可展开) */}
+      {/* Original text (expandable) */}
       {showOriginal && (
         <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
           <h3 className="font-semibold text-gray-700 mb-2">OCR 识别的原始文本：</h3>
@@ -93,7 +103,7 @@ export default function NoteDisplay({ originalText, formattedNote, processingTim
         </div>
       )}
 
-      {/* Markdown 渲染 */}
+      {/* Markdown rendering */}
       <div className="bg-white border border-gray-200 rounded-lg p-6 prose prose-sm max-w-none">
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
@@ -119,13 +129,14 @@ export default function NoteDisplay({ originalText, formattedNote, processingTim
             li: ({ node, ...props }) => (
               <li className="text-gray-700" {...props} />
             ),
-            code: ({ node, inline, ...props }) => (
-              inline ? (
+            code: ({ node, className, ...props }) => {
+              const isInline = !className?.includes('language-');
+              return isInline ? (
                 <code className="bg-gray-100 text-red-600 px-1.5 py-0.5 rounded text-sm font-mono" {...props} />
               ) : (
                 <code className="block bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm font-mono" {...props} />
-              )
-            ),
+              );
+            },
             blockquote: ({ node, ...props }) => (
               <blockquote className="border-l-4 border-blue-500 pl-4 italic text-gray-600 my-4" {...props} />
             ),

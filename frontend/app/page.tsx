@@ -7,14 +7,14 @@ import toast, { Toaster } from 'react-hot-toast';
 import ImageUploader from '@/components/ImageUploader';
 import NoteDisplay from '@/components/NoteDisplay';
 import LoadingSpinner from '@/components/LoadingSpinner';
-import { processNote } from '@/lib/api';
+import { processNote, ProcessNoteResponse } from '@/lib/api';
 
 export default function Home() {
-  const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [context, setContext] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [result, setResult] = useState(null);
+  const [result, setResult] = useState<ProcessNoteResponse | null>(null);
 
   const handleProcess = async () => {
     if (!selectedFile) {
@@ -29,7 +29,7 @@ export default function Home() {
     const loadingToast = toast.loading('正在处理笔记...');
 
     try {
-      // 调用 API
+      // Call API
       const response = await processNote(
         selectedFile,
         context,
@@ -46,7 +46,8 @@ export default function Home() {
       }
     } catch (error) {
       console.error('Processing error:', error);
-      toast.error(error.message || '处理失败，请重试', { id: loadingToast });
+      const errorMessage = error instanceof Error ? error.message : '处理失败，请重试';
+      toast.error(errorMessage, { id: loadingToast });
     } finally {
       setIsProcessing(false);
       setProgress(0);
@@ -62,7 +63,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
       <Toaster position="top-right" />
-      
+
       {/* Header */}
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-6xl mx-auto px-4 py-6">
@@ -82,7 +83,7 @@ export default function Home() {
       <main className="max-w-6xl mx-auto px-4 py-8">
         {!result ? (
           <div className="space-y-6">
-            {/* 介绍卡片 */}
+            {/* Introduction card */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <div className="flex items-start space-x-4">
                 <div className="p-3 bg-blue-100 rounded-lg">
@@ -114,20 +115,20 @@ export default function Home() {
               </div>
             </div>
 
-            {/* 上传区域 */}
+            {/* Upload area */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                 <BookOpen className="w-5 h-5 mr-2 text-blue-600" />
                 上传笔记图片
               </h2>
-              
+
               <ImageUploader
                 onImageSelect={setSelectedFile}
                 disabled={isProcessing}
               />
             </div>
 
-            {/* 上下文输入 */}
+            {/* Context input */}
             {selectedFile && (
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -144,7 +145,7 @@ export default function Home() {
               </div>
             )}
 
-            {/* 处理按钮 */}
+            {/* Process button */}
             {selectedFile && (
               <div className="flex justify-center">
                 <button
@@ -157,7 +158,7 @@ export default function Home() {
               </div>
             )}
 
-            {/* 加载状态 */}
+            {/* Loading state */}
             {isProcessing && (
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
                 <LoadingSpinner
@@ -168,7 +169,7 @@ export default function Home() {
             )}
           </div>
         ) : (
-          /* 结果展示 */
+          /* Result display */
           <div className="space-y-6">
             <NoteDisplay
               originalText={result.original_text}
@@ -176,7 +177,7 @@ export default function Home() {
               processingTime={result.processing_time}
             />
 
-            {/* 操作按钮 */}
+            {/* Action buttons */}
             <div className="flex justify-center space-x-4">
               <button
                 onClick={handleReset}

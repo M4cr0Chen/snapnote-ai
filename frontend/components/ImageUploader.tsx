@@ -4,35 +4,40 @@ import React, { useState, useCallback } from 'react';
 import { Upload, X, Image as ImageIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-export default function ImageUploader({ onImageSelect, disabled = false }) {
-  const [preview, setPreview] = useState(null);
+interface ImageUploaderProps {
+  onImageSelect: (file: File | null) => void;
+  disabled?: boolean;
+}
+
+export default function ImageUploader({ onImageSelect, disabled = false }: ImageUploaderProps) {
+  const [preview, setPreview] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  const handleFile = useCallback((file) => {
-    // 验证文件类型
+  const handleFile = useCallback((file: File) => {
+    // Validate file type
     if (!file.type.startsWith('image/')) {
       toast.error('请上传图片文件');
       return;
     }
 
-    // 验证文件大小 (10MB)
+    // Validate file size (10MB)
     if (file.size > 10 * 1024 * 1024) {
       toast.error('文件大小不能超过 10MB');
       return;
     }
 
-    // 创建预览
+    // Create preview
     const reader = new FileReader();
     reader.onload = (e) => {
-      setPreview(e.target.result);
+      setPreview(e.target?.result as string);
     };
     reader.readAsDataURL(file);
 
-    // 传递文件给父组件
+    // Pass file to parent component
     onImageSelect(file);
   }, [onImageSelect]);
 
-  const handleDrop = useCallback((e) => {
+  const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(false);
 
@@ -42,18 +47,18 @@ export default function ImageUploader({ onImageSelect, disabled = false }) {
     }
   }, [handleFile]);
 
-  const handleDragOver = useCallback((e) => {
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(true);
   }, []);
 
-  const handleDragLeave = useCallback((e) => {
+  const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(false);
   }, []);
 
-  const handleFileInput = useCallback((e) => {
-    const file = e.target.files[0];
+  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (file) {
       handleFile(file);
     }
@@ -71,8 +76,8 @@ export default function ImageUploader({ onImageSelect, disabled = false }) {
           className={`
             border-2 border-dashed rounded-lg p-8 text-center cursor-pointer
             transition-all duration-200
-            ${isDragging 
-              ? 'border-blue-500 bg-blue-50' 
+            ${isDragging
+              ? 'border-blue-500 bg-blue-50'
               : 'border-gray-300 hover:border-blue-400 hover:bg-gray-50'
             }
             ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
@@ -80,7 +85,7 @@ export default function ImageUploader({ onImageSelect, disabled = false }) {
           onDrop={handleDrop}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
-          onClick={() => !disabled && document.getElementById('file-input').click()}
+          onClick={() => !disabled && document.getElementById('file-input')?.click()}
         >
           <input
             id="file-input"
@@ -90,9 +95,9 @@ export default function ImageUploader({ onImageSelect, disabled = false }) {
             onChange={handleFileInput}
             disabled={disabled}
           />
-          
+
           <Upload className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-          
+
           <p className="text-lg font-medium text-gray-700 mb-2">
             拖拽图片到此处，或点击上传
           </p>
@@ -107,7 +112,7 @@ export default function ImageUploader({ onImageSelect, disabled = false }) {
             alt="Preview"
             className="w-full h-auto max-h-96 object-contain"
           />
-          
+
           {!disabled && (
             <button
               onClick={clearImage}
@@ -117,7 +122,7 @@ export default function ImageUploader({ onImageSelect, disabled = false }) {
               <X className="w-5 h-5" />
             </button>
           )}
-          
+
           <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/50 to-transparent p-4">
             <div className="flex items-center text-white text-sm">
               <ImageIcon className="w-4 h-4 mr-2" />
