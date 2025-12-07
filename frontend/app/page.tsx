@@ -175,6 +175,7 @@ export default function Home() {
               originalText={result.original_text}
               formattedNote={result.formatted_note}
               processingTime={result.processing_time}
+              documentId={result.document_id}
             />
 
             {/* Action buttons */}

@@ -3,11 +3,16 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime
+import logging
 
 from database import get_db
 from models import Document, Course, User
 from services.auth_service import get_current_user
+from services.embedding_service import get_embedding_service
+from services.vector_store import get_vector_store
 from schemas.document import DocumentCreate, DocumentUpdate, DocumentResponse
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
@@ -74,6 +79,16 @@ async def create_document(
     if not excerpt and document_data.formatted_note:
         excerpt = document_data.formatted_note[:200]
 
+    # Generate embedding for the formatted note
+    embedding_service = get_embedding_service()
+    try:
+        # Use formatted note for embedding (it's cleaner than original OCR text)
+        embedding = embedding_service.create_embedding(document_data.formatted_note)
+        logger.info(f"Generated embedding for new document: {document_data.title}")
+    except Exception as e:
+        logger.error(f"Failed to generate embedding: {e}")
+        embedding = None
+
     document = Document(
         course_id=document_data.course_id,
         user_id=current_user.id,
@@ -83,7 +98,8 @@ async def create_document(
         excerpt=excerpt,
         image_path=document_data.image_path,
         processing_time=document_data.processing_time,
-        doc_metadata=document_data.metadata or {}
+        doc_metadata=document_data.metadata or {},
+        embedding=embedding  # Store the embedding
     )
     db.add(document)
     db.commit()
@@ -144,6 +160,16 @@ async def update_document(
         document.title = document_data.title
     if document_data.formatted_note is not None:
         document.formatted_note = document_data.formatted_note
+
+        # Regenerate embedding when formatted note is updated
+        embedding_service = get_embedding_service()
+        try:
+            new_embedding = embedding_service.create_embedding(document_data.formatted_note)
+            document.embedding = new_embedding
+            logger.info(f"Regenerated embedding for updated document: {document_id}")
+        except Exception as e:
+            logger.error(f"Failed to regenerate embedding: {e}")
+
     if document_data.course_id is not None:
         # Verify new course belongs to user
         course = db.query(Course).filter(
@@ -204,3 +230,42 @@ async def restore_document(
     db.commit()
 
     return {"message": "Document restored"}
+
+
+@router.get("/{document_id}/related", response_model=List[dict])
+async def get_related_notes(
+    document_id: str,
+    top_k: int = 5,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get notes related to a specific document using vector similarity.
+
+    This endpoint uses RAG to find semantically similar notes within the same course.
+
+    Args:
+        document_id: Source document ID
+        top_k: Number of related notes to return (default: 5)
+
+    Returns:
+        List of related notes with id, title, excerpt, similarity score, and created_at
+    """
+    # Verify document belongs to user
+    document = db.query(Document).filter(
+        Document.id == document_id,
+        Document.user_id == current_user.id
+    ).first()
+
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    # Get related notes using vector store
+    vector_store = get_vector_store()
+    related_notes = vector_store.find_related_notes(
+        db=db,
+        document_id=document_id,
+        top_k=top_k
+    )
+
+    return related_notes

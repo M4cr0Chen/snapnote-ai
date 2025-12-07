@@ -2,6 +2,7 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from contextlib import asynccontextmanager
+from typing import Optional
 import aiofiles
 import os
 import time
@@ -18,7 +19,9 @@ from schemas import (
 )
 from services.ocr_service import ocr_service
 from services.llm_service import llm_service
-from services.auth_service import get_current_user
+from services.auth_service import get_current_user, get_current_user_optional
+from services.embedding_service import get_embedding_service
+from services.vector_store import get_vector_store
 from routes import user_router, courses_router, documents_router
 
 # Configure logging
@@ -175,42 +178,32 @@ async def process_note(
     additional_context: str = Form(None),
     course_id: str = Form(None),
     title: str = Form(None),
-    current_user: User = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_current_user_optional),
     db: Session = Depends(get_db)
 ):
     """
     Complete note processing pipeline: Upload -> OCR -> LLM formatting -> Save to database
 
-    Requires authentication. Documents are automatically saved to the specified course.
+    Authentication is optional. If authenticated and course_id is provided, documents are saved.
+    If not authenticated, only OCR + LLM formatting is performed (no RAG, no saving).
 
     Args:
         file: Image file to process
         additional_context: Additional context for LLM (optional)
-        course_id: Course ID to save the document to
+        course_id: Course ID to save the document to (optional)
         title: Document title (optional, generated from content if not provided)
-        current_user: Current authenticated user (injected)
+        current_user: Current authenticated user (injected, optional)
         db: Database session (injected)
 
     Returns:
-        ProcessNoteResponse: Processing result with document ID
+        ProcessNoteResponse: Processing result with document ID (if saved)
     """
     start_time = time.time()
     saved_file_path = None
 
     try:
-        logger.info(f"Processing note for user {current_user.email}: {file.filename}")
-
-        # Verify course exists and belongs to user
-        if not course_id:
-            raise HTTPException(status_code=400, detail="course_id is required")
-
-        course = db.query(Course).filter(
-            Course.id == course_id,
-            Course.user_id == current_user.id
-        ).first()
-
-        if not course:
-            raise HTTPException(status_code=404, detail="Course not found")
+        user_email = current_user.email if current_user else "anonymous"
+        logger.info(f"Processing note for user {user_email}: {file.filename}")
 
         # 1. Read file
         contents = await file.read()
@@ -224,7 +217,7 @@ async def process_note(
             await f.write(contents)
 
         # 2. OCR recognition
-        logger.info("Step 1/2: OCR processing...")
+        logger.info("Step 1: OCR processing...")
         ocr_text, confidence = ocr_service.extract_text(contents)
 
         if not ocr_text or len(ocr_text.strip()) < 10:
@@ -232,50 +225,104 @@ async def process_note(
 
         logger.info(f"OCR completed, extracted {len(ocr_text)} characters, confidence: {confidence:.2f}")
 
-        # 3. LLM formatting
-        logger.info("Step 2/2: LLM formatting...")
-        formatted_note = llm_service.format_note(ocr_text, additional_context)
+        # Determine if we should use RAG and save document
+        use_rag = current_user and course_id
+        course = None
+        historical_context = []
+        document_id = None
 
-        # 4. Save to database
-        # Generate title from formatted note if not provided
-        if not title:
-            # Extract first line or first 50 characters as title
-            lines = formatted_note.split('\n')
-            title = lines[0].strip('#').strip()[:100] if lines else "Untitled Note"
+        if use_rag:
+            # Verify course exists and belongs to user
+            course = db.query(Course).filter(
+                Course.id == course_id,
+                Course.user_id == current_user.id
+            ).first()
 
-        # Create excerpt from formatted note
-        excerpt = formatted_note[:200]
+            if not course:
+                raise HTTPException(status_code=404, detail="Course not found")
 
-        # Create document
-        document = Document(
-            course_id=course_id,
-            user_id=current_user.id,
-            title=title,
-            original_text=ocr_text,
-            formatted_note=formatted_note,
-            excerpt=excerpt,
-            image_path=saved_file_path,
-            processing_time=time.time() - start_time,
-            doc_metadata={
-                "ocr_confidence": confidence,
-                "file_name": file.filename,
-                "context": additional_context
-            }
-        )
+            # 3. RAG: Get historical context from similar notes
+            logger.info("Step 2: Generating embedding for context retrieval...")
+            embedding_service = get_embedding_service()
+            query_embedding = embedding_service.create_embedding(ocr_text)
 
-        db.add(document)
-        db.commit()
-        db.refresh(document)
+            logger.info("Step 3: Retrieving historical context...")
+            vector_store = get_vector_store()
+            historical_context = vector_store.get_context_for_new_note(
+                db=db,
+                new_note_text=ocr_text,
+                new_note_embedding=query_embedding,
+                course_id=course_id,
+                top_k=3  # Retrieve top 3 relevant historical notes
+            )
+
+            # 4. LLM formatting with RAG enhancement
+            logger.info(f"Step 4: LLM formatting with RAG ({len(historical_context)} historical notes)...")
+            if historical_context:
+                # Use RAG-enhanced formatting
+                formatted_note = llm_service.format_note_with_rag(
+                    ocr_text=ocr_text,
+                    course_name=course.name,
+                    historical_context=historical_context,
+                    additional_context=additional_context
+                )
+            else:
+                # Fallback to basic formatting if no historical context
+                logger.info("No historical context found, using basic formatting")
+                formatted_note = llm_service.format_note(ocr_text, additional_context)
+
+            # 5. Save to database
+            # Generate title from formatted note if not provided
+            if not title:
+                # Extract first line or first 50 characters as title
+                lines = formatted_note.split('\n')
+                title = lines[0].strip('#').strip()[:100] if lines else "Untitled Note"
+
+            # Create excerpt from formatted note
+            excerpt = formatted_note[:200]
+
+            # Generate embedding for the formatted note
+            final_embedding = embedding_service.create_embedding(formatted_note)
+
+            # Create document
+            document = Document(
+                course_id=course_id,
+                user_id=current_user.id,
+                title=title,
+                original_text=ocr_text,
+                formatted_note=formatted_note,
+                excerpt=excerpt,
+                image_path=saved_file_path,
+                processing_time=time.time() - start_time,
+                embedding=final_embedding,
+                doc_metadata={
+                    "ocr_confidence": confidence,
+                    "file_name": file.filename,
+                    "context": additional_context,
+                    "rag_context_count": len(historical_context)
+                }
+            )
+
+            db.add(document)
+            db.commit()
+            db.refresh(document)
+            document_id = str(document.id)
+            logger.info(f"Document saved: {document_id}")
+        else:
+            # No RAG, just basic LLM formatting
+            logger.info("Step 2: Basic LLM formatting (no RAG - not authenticated or no course)")
+            formatted_note = llm_service.format_note(ocr_text, additional_context)
+            logger.info("Skipping document save (no authentication or course)")
 
         processing_time = time.time() - start_time
-        logger.info(f"Processing completed in {processing_time:.2f}s, document saved: {document.id}")
+        logger.info(f"Processing completed in {processing_time:.2f}s")
 
         return ProcessNoteResponse(
             success=True,
             original_text=ocr_text,
             formatted_note=formatted_note,
             processing_time=processing_time,
-            document_id=str(document.id),
+            document_id=document_id,
             error=None
         )
 

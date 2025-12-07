@@ -25,4 +25,5 @@ class ProcessNoteResponse(BaseModel):
     original_text: str  # OCR 识别的原始文本
     formatted_note: str  # LLM 整理后的笔记
     processing_time: float
+    document_id: Optional[str] = None  # ID of saved document (for fetching related notes)
     error: Optional[str] = None

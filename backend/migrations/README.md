@@ -6,6 +6,8 @@ This directory contains SQL migration scripts for the SnapNote database.
 
 - **001_initial_schema.sql**: Creates users, courses, and documents tables with all indexes and constraints
 - **001_initial_schema_rollback.sql**: Drops all tables (use for rollback)
+- **002_add_vector_embeddings.sql**: Adds pgvector extension and embedding column for RAG functionality
+- **002_add_vector_embeddings_rollback.sql**: Removes embedding column and index
 - **run_migration.py**: Python script to run migrations
 
 ## Running Migrations

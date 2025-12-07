@@ -13,7 +13,16 @@ export interface ProcessNoteResponse {
   original_text: string;
   formatted_note: string;
   processing_time: number;
+  document_id: string | null;
   error: string | null;
+}
+
+export interface RelatedNote {
+  id: string;
+  title: string;
+  excerpt: string;
+  similarity: number;
+  created_at: string | null;
 }
 
 export interface OCRResponse {
@@ -126,6 +135,38 @@ export const uploadFile = async (file: File): Promise<UploadResponse> => {
   } catch (error) {
     console.error('Upload failed:', error);
     throw error;
+  }
+};
+
+/**
+ * Get related notes for a document
+ * @param documentId - Document ID
+ * @param topK - Number of related notes to retrieve (default: 5)
+ * @param token - Auth0 access token (optional, for authenticated requests)
+ */
+export const getRelatedNotes = async (
+  documentId: string,
+  topK: number = 5,
+  token?: string
+): Promise<RelatedNote[]> => {
+  try {
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await api.get<RelatedNote[]>(
+      `/api/documents/${documentId}/related`,
+      {
+        params: { top_k: topK },
+        headers
+      }
+    );
+
+    return response.data;
+  } catch (error) {
+    console.error('Failed to fetch related notes:', error);
+    return []; // Return empty array on error
   }
 };
 

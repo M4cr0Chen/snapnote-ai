@@ -3,6 +3,7 @@ from fastapi import HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
 from sqlalchemy.orm import Session
+from typing import Optional
 import requests
 from datetime import datetime
 
@@ -11,6 +12,7 @@ from database import get_db
 from models import User
 
 security = HTTPBearer()
+optional_security = HTTPBearer(auto_error=False)
 
 
 def get_jwks():
@@ -79,3 +81,30 @@ async def get_current_user(
     db.commit()
 
     return user
+
+
+async def get_current_user_optional(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security),
+    db: Session = Depends(get_db)
+) -> Optional[User]:
+    """Get current user from Auth0 token (optional - returns None if no token)"""
+    if not credentials:
+        return None
+
+    try:
+        token = credentials.credentials
+
+        # Verify Auth0 token
+        auth0_user = verify_token(token)
+
+        # Get or create user in our database
+        user = User.get_or_create_from_auth0(db, auth0_user)
+
+        # Update last login
+        user.last_login_at = datetime.utcnow()
+        db.commit()
+
+        return user
+    except Exception:
+        # If token is invalid, return None instead of raising error
+        return None

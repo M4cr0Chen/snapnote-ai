@@ -3,6 +3,7 @@ from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Float, CheckC
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+from pgvector.sqlalchemy import Vector
 import uuid
 
 from database import Base
@@ -23,6 +24,7 @@ class Document(Base):
     status = Column(String(20), default='active')
     processing_time = Column(Float)
     doc_metadata = Column(JSONB, default={}, name='metadata')  # Column name 'metadata', property 'doc_metadata'
+    embedding = Column(Vector(384))  # 384-dimensional vector for semantic search
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     deleted_at = Column(DateTime(timezone=True))
