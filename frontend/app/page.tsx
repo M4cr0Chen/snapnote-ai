@@ -1,200 +1,216 @@
 'use client';
 
-import React, { useState } from 'react';
-import { BookOpen, Sparkles, Camera } from 'lucide-react';
-import toast, { Toaster } from 'react-hot-toast';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/lib/hooks/useAuth';
+import { BookOpen, Sparkles, FolderTree, Brain, CheckCircle2, Loader2 } from 'lucide-react';
 
-import ImageUploader from '@/components/ImageUploader';
-import NoteDisplay from '@/components/NoteDisplay';
-import LoadingSpinner from '@/components/LoadingSpinner';
-import { processNote, ProcessNoteResponse } from '@/lib/api';
+export default function LandingPage() {
+  const router = useRouter();
+  const { isAuthenticated, isLoading, loginWithRedirect } = useAuth();
 
-export default function Home() {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [context, setContext] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [result, setResult] = useState<ProcessNoteResponse | null>(null);
-
-  const handleProcess = async () => {
-    if (!selectedFile) {
-      toast.error('请先上传图片');
-      return;
+  // Redirect to dashboard if already authenticated
+  useEffect(() => {
+    if (isAuthenticated && !isLoading) {
+      router.push('/dashboard');
     }
+  }, [isAuthenticated, isLoading, router]);
 
-    setIsProcessing(true);
-    setProgress(0);
-    setResult(null);
-
-    const loadingToast = toast.loading('正在处理笔记...');
-
-    try {
-      // Call API
-      const response = await processNote(
-        selectedFile,
-        context,
-        (uploadProgress) => {
-          setProgress(uploadProgress);
-        }
-      );
-
-      if (response.success) {
-        setResult(response);
-        toast.success('笔记整理完成！', { id: loadingToast });
-      } else {
-        throw new Error(response.error || '处理失败');
-      }
-    } catch (error) {
-      console.error('Processing error:', error);
-      const errorMessage = error instanceof Error ? error.message : '处理失败，请重试';
-      toast.error(errorMessage, { id: loadingToast });
-    } finally {
-      setIsProcessing(false);
-      setProgress(0);
-    }
+  const handleLogin = () => {
+    loginWithRedirect();
   };
 
-  const handleReset = () => {
-    setSelectedFile(null);
-    setContext('');
-    setResult(null);
-  };
+  // Show loading state while checking authentication
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-50">
+        <div className="text-center">
+          <Loader2 className="w-10 h-10 text-blue-600 animate-spin mx-auto mb-4" />
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      <Toaster position="top-right" />
-
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-6xl mx-auto px-4 py-6">
-          <div className="flex items-center space-x-3">
-            <div className="p-2 bg-blue-600 rounded-lg">
-              <Camera className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">SnapNote</h1>
-              <p className="text-sm text-gray-600">AI 驱动的智能笔记整理平台</p>
-            </div>
+      <header className="border-b bg-white/80 backdrop-blur-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <BookOpen className="w-8 h-8 text-blue-600" />
+            <span className="text-xl font-semibold">SnapNote AI</span>
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={handleLogin}
+              className="px-4 py-2 text-gray-700 hover:text-gray-900 transition-colors"
+            >
+              Log In
+            </button>
+            <button
+              onClick={handleLogin}
+              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Sign Up Free
+            </button>
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="max-w-6xl mx-auto px-4 py-8">
-        {!result ? (
-          <div className="space-y-6">
-            {/* Introduction card */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <div className="flex items-start space-x-4">
-                <div className="p-3 bg-blue-100 rounded-lg">
-                  <Sparkles className="w-6 h-6 text-blue-600" />
-                </div>
-                <div className="flex-1">
-                  <h2 className="text-lg font-semibold text-gray-900 mb-2">
-                    如何使用？
-                  </h2>
-                  <ol className="space-y-2 text-sm text-gray-600">
-                    <li className="flex items-start">
-                      <span className="font-semibold text-blue-600 mr-2">1.</span>
-                      <span>上传课堂笔记、黑板板书或 PPT 截图</span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="font-semibold text-blue-600 mr-2">2.</span>
-                      <span>（可选）添加课程上下文信息，帮助 AI 更好地理解</span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="font-semibold text-blue-600 mr-2">3.</span>
-                      <span>点击处理，等待 AI 识别并整理笔记</span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="font-semibold text-blue-600 mr-2">4.</span>
-                      <span>复制或下载整理好的 Markdown 格式笔记</span>
-                    </li>
-                  </ol>
-                </div>
-              </div>
+      {/* Hero Section */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center">
+        <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-100 text-blue-700 rounded-full mb-6">
+          <Sparkles className="w-4 h-4" />
+          <span className="text-sm font-medium">AI-Powered Note Processing</span>
+        </div>
+
+        <h1 className="text-5xl md:text-6xl font-bold mb-6 text-gray-900">
+          Convert messy notes to clean
+          <br />
+          <span className="text-blue-600">Markdown in seconds</span>
+        </h1>
+
+        <p className="text-xl text-gray-600 max-w-2xl mx-auto mb-10">
+          Transform handwritten notes, blackboard photos, and presentation screenshots
+          into beautifully formatted study materials with AI-powered OCR.
+        </p>
+
+        <div className="flex gap-4 justify-center mb-16">
+          <button
+            onClick={handleLogin}
+            className="px-8 py-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200 font-medium"
+          >
+            Get Started Free
+          </button>
+          <button className="px-8 py-4 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors border border-gray-300 font-medium">
+            Watch Demo
+          </button>
+        </div>
+
+        {/* Demo Image Placeholder */}
+        <div className="max-w-5xl mx-auto bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden">
+          <div className="aspect-video bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center">
+            <div className="text-center">
+              <BookOpen className="w-24 h-24 text-blue-400 mx-auto mb-4" />
+              <p className="text-gray-500">App Demo Screenshot</p>
             </div>
-
-            {/* Upload area */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                <BookOpen className="w-5 h-5 mr-2 text-blue-600" />
-                上传笔记图片
-              </h2>
-
-              <ImageUploader
-                onImageSelect={setSelectedFile}
-                disabled={isProcessing}
-              />
-            </div>
-
-            {/* Context input */}
-            {selectedFile && (
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  额外上下文（可选）
-                </label>
-                <textarea
-                  value={context}
-                  onChange={(e) => setContext(e.target.value)}
-                  placeholder="例如：这是机器学习课程的第三讲，主要讲解神经网络..."
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                  rows={3}
-                  disabled={isProcessing}
-                />
-              </div>
-            )}
-
-            {/* Process button */}
-            {selectedFile && (
-              <div className="flex justify-center">
-                <button
-                  onClick={handleProcess}
-                  disabled={isProcessing}
-                  className="px-8 py-4 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
-                >
-                  {isProcessing ? '处理中...' : '开始处理笔记'}
-                </button>
-              </div>
-            )}
-
-            {/* Loading state */}
-            {isProcessing && (
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                <LoadingSpinner
-                  message="AI 正在识别和整理笔记，请稍候..."
-                  progress={progress}
-                />
-              </div>
-            )}
           </div>
-        ) : (
-          /* Result display */
-          <div className="space-y-6">
-            <NoteDisplay
-              originalText={result.original_text}
-              formattedNote={result.formatted_note}
-              processingTime={result.processing_time}
-              documentId={result.document_id}
+        </div>
+      </section>
+
+      {/* Features Section */}
+      <section className="bg-white py-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <h2 className="text-3xl font-bold text-center mb-12 text-gray-900">
+            Everything you need to organize your studies
+          </h2>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+            <FeatureCard
+              icon={<Sparkles className="w-8 h-8 text-blue-600" />}
+              title="Smart OCR"
+              description="Advanced optical character recognition extracts text from handwritten notes and images with high accuracy."
             />
-
-            {/* Action buttons */}
-            <div className="flex justify-center space-x-4">
-              <button
-                onClick={handleReset}
-                className="px-6 py-3 bg-white border-2 border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                处理新笔记
-              </button>
-            </div>
+            <FeatureCard
+              icon={<Brain className="w-8 h-8 text-indigo-600" />}
+              title="AI Formatting"
+              description="Automatically structures your notes with proper headers, lists, and formatting for easy reading."
+            />
+            <FeatureCard
+              icon={<FolderTree className="w-8 h-8 text-purple-600" />}
+              title="Course Organization"
+              description="Keep notes organized by courses and subjects. Find what you need instantly with semantic search."
+            />
+            <FeatureCard
+              icon={<CheckCircle2 className="w-8 h-8 text-green-600" />}
+              title="Study Materials"
+              description="Auto-generate flashcards, Q&A pairs, and key concepts to help you study more effectively."
+            />
           </div>
-        )}
-      </main>
+        </div>
+      </section>
+
+      {/* How It Works */}
+      <section className="py-20 bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <h2 className="text-3xl font-bold text-center mb-12 text-gray-900">
+            From photo to formatted notes in 3 steps
+          </h2>
+
+          <div className="grid md:grid-cols-3 gap-12">
+            <StepCard
+              number="1"
+              title="Upload Your Notes"
+              description="Drag and drop photos of handwritten notes, whiteboards, or presentation slides."
+            />
+            <StepCard
+              number="2"
+              title="AI Processing"
+              description="Our AI extracts text, analyzes structure, and formats everything into clean Markdown."
+            />
+            <StepCard
+              number="3"
+              title="Study & Organize"
+              description="Access formatted notes, auto-generated flashcards, and organize by course."
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* CTA Section */}
+      <section className="py-20 bg-blue-600 text-white">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <h2 className="text-4xl font-bold mb-6">
+            Ready to transform your note-taking?
+          </h2>
+          <p className="text-xl text-blue-100 mb-8">
+            Join thousands of students who are studying smarter with SnapNote AI.
+          </p>
+          <button
+            onClick={handleLogin}
+            className="px-8 py-4 bg-white text-blue-600 rounded-lg hover:bg-blue-50 transition-colors shadow-lg font-medium"
+          >
+            Start Free Today
+          </button>
+        </div>
+      </section>
 
       {/* Footer */}
-      <footer className="max-w-6xl mx-auto px-4 py-8 mt-12 text-center text-sm text-gray-500">
-        <p>Powered by Claude AI & Google Vision</p>
+      <footer className="bg-gray-900 text-gray-400 py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <div className="flex items-center justify-center gap-2 mb-4">
+            <BookOpen className="w-6 h-6" />
+            <span>SnapNote AI</span>
+          </div>
+          <p className="text-sm">Powered by Claude AI & Google Vision</p>
+          <p className="text-sm mt-2">© 2025 SnapNote AI. All rights reserved.</p>
+        </div>
       </footer>
+    </div>
+  );
+}
+
+function FeatureCard({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) {
+  return (
+    <div className="text-center">
+      <div className="inline-flex items-center justify-center mb-4">
+        {icon}
+      </div>
+      <h3 className="font-semibold mb-2 text-gray-900">{title}</h3>
+      <p className="text-gray-600 text-sm">{description}</p>
+    </div>
+  );
+}
+
+function StepCard({ number, title, description }: { number: string; title: string; description: string }) {
+  return (
+    <div className="text-center">
+      <div className="w-16 h-16 bg-blue-600 text-white rounded-full flex items-center justify-center mx-auto mb-4 text-2xl font-bold">
+        {number}
+      </div>
+      <h3 className="font-semibold mb-2 text-gray-900">{title}</h3>
+      <p className="text-gray-600">{description}</p>
     </div>
   );
 }
