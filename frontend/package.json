@@ -9,7 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@auth0/auth0-react": "^2.11.0",
+    "@auth0/nextjs-auth0": "^4.14.0",
     "axios": "^1.13.1",
     "katex": "^0.16.27",
     "lucide-react": "^0.552.0",

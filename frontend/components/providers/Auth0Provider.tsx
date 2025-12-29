@@ -1,6 +1,6 @@
 'use client';
 
-import { Auth0Provider as Auth0ProviderBase } from '@auth0/auth0-react';
+import { Auth0Provider as Auth0ClientProvider } from '@auth0/nextjs-auth0/client';
 import { ReactNode } from 'react';
 import { MockAuthContext } from '@/lib/hooks/useAuth';
 
@@ -17,10 +17,10 @@ function MockAuth0Provider({ children }: { children: ReactNode }) {
       name: 'Dev User',
       email: 'dev@example.com',
       sub: 'dev-user-123',
+      picture: undefined,
     },
     loginWithRedirect: () => {
       console.log('Mock login - Auth0 not configured');
-      // In dev mode, redirect to dashboard
       window.location.href = '/dashboard';
     },
     logout: () => {
@@ -43,7 +43,6 @@ function MockAuth0Provider({ children }: { children: ReactNode }) {
 export default function Auth0Provider({ children }: Auth0ProviderProps) {
   const domain = process.env.NEXT_PUBLIC_AUTH0_DOMAIN;
   const clientId = process.env.NEXT_PUBLIC_AUTH0_CLIENT_ID;
-  const audience = process.env.NEXT_PUBLIC_AUTH0_AUDIENCE;
 
   // If Auth0 is not configured, use mock provider for development
   if (!domain || !clientId) {
@@ -52,16 +51,8 @@ export default function Auth0Provider({ children }: Auth0ProviderProps) {
   }
 
   return (
-    <Auth0ProviderBase
-      domain={domain}
-      clientId={clientId}
-      authorizationParams={{
-        redirect_uri: typeof window !== 'undefined' ? window.location.origin : '',
-        audience: audience,
-      }}
-      cacheLocation="localstorage"
-    >
+    <Auth0ClientProvider>
       {children}
-    </Auth0ProviderBase>
+    </Auth0ClientProvider>
   );
 }

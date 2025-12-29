@@ -1,7 +1,7 @@
 'use client';
 
-import { useAuth0 } from '@auth0/auth0-react';
-import { useContext, createContext } from 'react';
+import { useUser, getAccessToken } from '@auth0/nextjs-auth0/client';
+import { useContext, createContext, useCallback } from 'react';
 
 // Logout options type
 interface LogoutOptions {
@@ -10,7 +10,7 @@ interface LogoutOptions {
   };
 }
 
-// Mock auth context type
+// Auth context type
 interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
@@ -36,32 +36,53 @@ export function useAuth(): AuthContextType {
   // Try to get mock context first
   const mockContext = useContext(MockAuthContext);
 
-  // If mock context exists, use it
+  // If mock context exists, use it (dev mode without Auth0)
   if (mockContext) {
     return mockContext;
   }
 
-  // Otherwise, try to use Auth0
-  // This will work when Auth0 is configured
-  try {
-    const auth0 = useAuth0();
-    return {
-      isAuthenticated: auth0.isAuthenticated,
-      isLoading: auth0.isLoading,
-      user: auth0.user,
-      loginWithRedirect: auth0.loginWithRedirect,
-      logout: auth0.logout,
-      getAccessTokenSilently: auth0.getAccessTokenSilently,
-    };
-  } catch {
-    // If Auth0 is not available, return default unauthenticated state
-    return {
-      isAuthenticated: false,
-      isLoading: false,
-      user: undefined,
-      loginWithRedirect: () => console.warn('Auth not configured'),
-      logout: () => console.warn('Auth not configured'),
-      getAccessTokenSilently: async () => '',
-    };
+  // Otherwise, use Auth0 nextjs-auth0
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const { user, isLoading, error } = useUser();
+
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const loginWithRedirect = useCallback(() => {
+    // Use <a> tag navigation for auth routes as recommended by Auth0
+    window.location.href = '/auth/login';
+  }, []);
+
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const logout = useCallback((options?: LogoutOptions) => {
+    const returnTo = options?.logoutParams?.returnTo || window.location.origin;
+    window.location.href = `/auth/logout?returnTo=${encodeURIComponent(returnTo)}`;
+  }, []);
+
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const getAccessTokenSilently = useCallback(async (): Promise<string> => {
+    try {
+      const token = await getAccessToken();
+      return token || '';
+    } catch {
+      console.error('Failed to get access token');
+      return '';
+    }
+  }, []);
+
+  if (error) {
+    console.error('Auth error:', error);
   }
+
+  return {
+    isAuthenticated: !!user,
+    isLoading,
+    user: user ? {
+      name: user.name || undefined,
+      email: user.email || undefined,
+      picture: user.picture || undefined,
+      sub: user.sub || undefined,
+    } : undefined,
+    loginWithRedirect,
+    logout,
+    getAccessTokenSilently,
+  };
 }
